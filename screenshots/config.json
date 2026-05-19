@@ -1,0 +1,13 @@
+{
+  "brand": "宇视",
+  "ip": "192.168.",
+  "port": "554",
+  "username": "admin",
+  "password": "",
+  "channel": "1",
+  "cb_w": "11",
+  "cb_h": "8",
+  "interval": "5",
+  "serial": "A001",
+  "target_count": "5"
+}
