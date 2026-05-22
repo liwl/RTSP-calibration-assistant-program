@@ -158,6 +158,32 @@ class App:
         ttk.Entry(param_frame, textvariable=self.target_count_var, width=6, justify=tk.CENTER).pack(side=tk.LEFT, padx=(3, 0))
         ttk.Label(param_frame, text="张").pack(side=tk.LEFT, padx=2)
 
+        # 质量阈值
+        thresh_frame = ttk.LabelFrame(frame, text="质量阈值", padding=5)
+        thresh_frame.pack(fill=tk.X, pady=(0, 4))
+        trow1 = ttk.Frame(thresh_frame)
+        trow1.pack(fill=tk.X, pady=1)
+        ttk.Label(trow1, text="棋盘格面积占比≥:").pack(side=tk.LEFT)
+        self.area_ratio_var = tk.StringVar(value=self._config.get('area_ratio_min', '0.10'))
+        ttk.Entry(trow1, textvariable=self.area_ratio_var, width=6, justify=tk.CENTER).pack(side=tk.LEFT, padx=(3, 15))
+        ttk.Label(trow1, text="姿态中心距离≤:").pack(side=tk.LEFT)
+        self.pose_center_dist_var = tk.StringVar(value=self._config.get('pose_center_dist', '50'))
+        ttk.Entry(trow1, textvariable=self.pose_center_dist_var, width=6, justify=tk.CENTER).pack(side=tk.LEFT, padx=(3, 15))
+        ttk.Label(trow1, text="姿态缩放比:").pack(side=tk.LEFT)
+        self.pose_scale_min_var = tk.StringVar(value=self._config.get('pose_scale_min', '0.85'))
+        ttk.Entry(trow1, textvariable=self.pose_scale_min_var, width=5, justify=tk.CENTER).pack(side=tk.LEFT, padx=(3, 0))
+        ttk.Label(trow1, text="~").pack(side=tk.LEFT, padx=1)
+        self.pose_scale_max_var = tk.StringVar(value=self._config.get('pose_scale_max', '1.15'))
+        ttk.Entry(trow1, textvariable=self.pose_scale_max_var, width=5, justify=tk.CENTER).pack(side=tk.LEFT, padx=(0, 15))
+        ttk.Label(trow1, text="形状差异≤:").pack(side=tk.LEFT)
+        self.pose_shape_diff_var = tk.StringVar(value=self._config.get('pose_shape_diff', '0.05'))
+        ttk.Entry(trow1, textvariable=self.pose_shape_diff_var, width=6, justify=tk.CENTER).pack(side=tk.LEFT, padx=(3, 0))
+
+        trow2 = ttk.Frame(thresh_frame)
+        trow2.pack(fill=tk.X, pady=1)
+        self.flip_var = tk.BooleanVar(value=self._config.get('flip_180', False))
+        ttk.Checkbutton(trow2, text="画面翻转180°（相机倒装时使用）", variable=self.flip_var).pack(side=tk.LEFT)
+
         osd_frame = ttk.LabelFrame(frame, text="OSD清除", padding=5)
         osd_frame.pack(fill=tk.X, pady=(0, 4))
         osd_top = ttk.Frame(osd_frame)
@@ -273,6 +299,12 @@ class App:
             'interval': self.interval_var.get(),
             'serial': self.serial_var.get(),
             'target_count': self.target_count_var.get(),
+            'area_ratio_min': self.area_ratio_var.get(),
+            'pose_center_dist': self.pose_center_dist_var.get(),
+            'pose_scale_min': self.pose_scale_min_var.get(),
+            'pose_scale_max': self.pose_scale_max_var.get(),
+            'pose_shape_diff': self.pose_shape_diff_var.get(),
+            'flip_180': self.flip_var.get(),
         }
         try:
             os.makedirs(os.path.dirname(self._config_file), exist_ok=True)
@@ -579,6 +611,10 @@ class App:
     def _check_pose_similarity(self, corners):
         if not self.photo_data:
             return False
+        center_dist_max = float(self._config.get('pose_center_dist', '50'))
+        scale_min = float(self._config.get('pose_scale_min', '0.85'))
+        scale_max = float(self._config.get('pose_scale_max', '1.15'))
+        shape_diff_max = float(self._config.get('pose_shape_diff', '0.05'))
         new_center, new_scale, new_norm = self._compute_pose_signature(corners)
         for item in self.photo_data:
             saved_corners = item[3]
@@ -586,22 +622,28 @@ class App:
                 continue
             old_center, old_scale, old_norm = self._compute_pose_signature(saved_corners)
             center_dist = np.linalg.norm(new_center - old_center)
-            if center_dist > 50:
+            if center_dist > center_dist_max:
                 continue
             ratio = new_scale / old_scale
-            if not (0.85 <= ratio <= 1.15):
+            if not (scale_min <= ratio <= scale_max):
                 continue
             diff = np.sqrt(((new_norm - old_norm) ** 2).mean())
-            if diff < 0.05:
+            if diff < shape_diff_max:
                 self.log(f"与 {os.path.basename(item[0])} 姿态相似(差异={diff:.4f}), 舍弃")
                 return True
         return False
 
+    def _maybe_flip_frame(self, frame):
+        if self.flip_var.get():
+            return cv2.rotate(frame, cv2.ROTATE_180)
+        return frame
+
     def _do_capture(self):
-        # 单次截图流程：取帧 → 棋盘格检测 → 质量检测(清晰度/曝光/贴边/面积/去重) → 保存
+        # 单次截图流程：取帧 → 翻转 → 棋盘格检测 → 质量检测 → 保存
         frame = self.snapshotter.capture_frame()
         if frame is None:
             return None
+        frame = self._maybe_flip_frame(frame)
 
         found, corners = self.detector.detect(frame)
 
@@ -634,9 +676,10 @@ class App:
                 return True
 
             area_ratio = self.detector.compute_chessboard_area_ratio(frame, corners)
+            area_ratio_min = float(self._config.get('area_ratio_min', '0.10'))
 
-            if area_ratio < 0.10:
-                self.log(f"棋盘格面积占比: {area_ratio:.1%} < 10%, 已舍弃")
+            if area_ratio < area_ratio_min:
+                self.log(f"棋盘格面积占比: {area_ratio:.1%} < {area_ratio_min:.0%}, 已舍弃")
                 drawn = self.detector.draw_corners(frame, corners)
                 self._update_preview(drawn)
                 self.announcer.warn_area_ratio()
@@ -773,6 +816,7 @@ class App:
         if self.running and self.snapshotter:
             frame = self.snapshotter.capture_frame()
             if frame is not None:
+                frame = self._maybe_flip_frame(frame)
                 self.root.after(0, lambda f=frame: self._show_frame_on_label(f, self.live_preview_label))
         self.root.after(150, self._live_update)
 

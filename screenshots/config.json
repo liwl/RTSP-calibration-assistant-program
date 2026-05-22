@@ -9,5 +9,11 @@
   "cb_h": "8",
   "interval": "5",
   "serial": "A001",
-  "target_count": "5"
+  "target_count": "5",
+  "area_ratio_min": "0.10",
+  "pose_center_dist": "50",
+  "pose_scale_min": "0.85",
+  "pose_scale_max": "1.15",
+  "pose_shape_diff": "0.05",
+  "flip_180": false
 }
