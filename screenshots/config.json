@@ -1,13 +1,28 @@
 {
-  "brand": "宇视",
-  "ip": "192.168.",
-  "port": "554",
-  "username": "admin",
-  "password": "",
-  "channel": "1",
+  "cameras": [
+    {
+      "name": "宇视192.168.110.40",
+      "brand": "宇视",
+      "ip": "192.168.110.40",
+      "port": "40130",
+      "username": "admin",
+      "password": "admin",
+      "channel": "1"
+    },
+    {
+      "name": "海康51",
+      "brand": "海康威视",
+      "ip": "192.168.110.51",
+      "port": "554",
+      "username": "admin",
+      "password": "Admin12345",
+      "channel": "1"
+    }
+  ],
+  "selected_camera": "宇视192.168.110.40",
   "cb_w": "11",
   "cb_h": "8",
-  "interval": "5",
+  "interval": "1",
   "serial": "A001",
   "target_count": "5",
   "area_ratio_min": "0.10",
